@@ -25,47 +25,57 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
-                .csrf(csrf -> csrf.disable())
+            // ✅ Enable Spring Boot managed CORS (NO manual bean)
+            .cors(Customizer.withDefaults())
 
-                .authorizeHttpRequests(auth -> auth
+            // ❌ Disable CSRF (JWT based auth)
+            .csrf(csrf -> csrf.disable())
 
-                        // ⚡ CORS preflight
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+            .authorizeHttpRequests(auth -> auth
 
-                        // ----------------- AUTH ENDPOINTS -----------------
-                        .requestMatchers("/api/auth/register").permitAll()
-                        .requestMatchers("/api/auth/login").permitAll()
-                        .requestMatchers("/api/auth/token").permitAll()
+                // ✅ Allow CORS preflight
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // ----------------- CUSTOMER ENDPOINTS -----------------
-                        .requestMatchers("/api/users/me").hasAnyAuthority("CUSTOMER", "ADMIN")
-                        .requestMatchers("/api/users/update/me").hasAuthority("CUSTOMER")
+                // ---------- PUBLIC AUTH ENDPOINTS ----------
+                .requestMatchers(HttpMethod.POST, "/api/auth/signup").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                .requestMatchers("/api/auth/token").permitAll()
 
-                        // ----------------- ADMIN ENDPOINTS -----------------
-                        .requestMatchers("/api/admin/**").hasAuthority("ADMIN")
-                        .requestMatchers("/api/users/all").hasAuthority("ADMIN")
-                        .requestMatchers("/api/users/delete/**").hasAuthority("ADMIN")
+                // ---------- PROTECTED AUTH ----------
+                .requestMatchers("/api/auth/me").authenticated()
 
-                        // ----------------- ANY OTHER REQUEST -----------------
-                        .anyRequest().authenticated()
-                )
+                // ---------- CUSTOMER ----------
+                .requestMatchers("/api/users/me").hasAnyAuthority("CUSTOMER", "ADMIN")
+                .requestMatchers("/api/users/update/me").hasAuthority("CUSTOMER")
 
-                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
-                .httpBasic(Customizer.withDefaults());
+                // ---------- ADMIN ----------
+                .requestMatchers("/api/admin/**").hasAuthority("ADMIN")
+                .requestMatchers("/api/users/all").hasAuthority("ADMIN")
+                .requestMatchers("/api/users/delete/**").hasAuthority("ADMIN")
+
+                // ---------- EVERYTHING ELSE ----------
+                .anyRequest().authenticated()
+            )
+
+            // ✅ JWT filter
+            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+
+            // (Optional) Basic auth disabled by default
+            .httpBasic(Customizer.withDefaults());
 
         return http.build();
     }
 
-    // Password encoder
+    // ✅ Password Encoder
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // Authentication Manager
+    // ✅ Authentication Manager
     @Bean
-    public AuthenticationManager authManager(AuthenticationConfiguration authConfig)
+    public AuthenticationManager authManager(AuthenticationConfiguration config)
             throws Exception {
-        return authConfig.getAuthenticationManager();
+        return config.getAuthenticationManager();
     }
 }

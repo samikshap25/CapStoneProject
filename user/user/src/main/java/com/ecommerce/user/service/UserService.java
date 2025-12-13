@@ -6,18 +6,28 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+
 @Service
 public class UserService {
 
-    @Autowired private UserRepository repo;
-    @Autowired private PasswordEncoder encoder;
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     public User register(User user) {
-        user.setPassword(encoder.encode(user.getPassword()));
-        return repo.save(user);
-    }
 
-    public User getByUsername(String username) {
-        return repo.findByUsername(username);
+        User newUser = new User();
+
+        newUser.setName(user.getName());
+        newUser.setEmail(user.getEmail());
+        newUser.setPhone(user.getPhone());
+        newUser.setUsername(user.getUsername());
+        newUser.setPassword(passwordEncoder.encode(user.getPassword()));
+        
+        newUser.setRole("USER");
+
+        return userRepository.save(newUser);
     }
 }
