@@ -6,7 +6,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-
 @Service
 public class UserService {
 
@@ -25,8 +24,9 @@ public class UserService {
         newUser.setPhone(user.getPhone());
         newUser.setUsername(user.getUsername());
         newUser.setPassword(passwordEncoder.encode(user.getPassword()));
-        
-        newUser.setRole("USER");
+
+        //  ROLE MUST MATCH SECURITY
+        newUser.setRole("CUSTOMER");
 
         return userRepository.save(newUser);
     }

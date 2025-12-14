@@ -5,7 +5,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -13,69 +12,85 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-@EnableWebSecurity
+import java.util.Arrays;
+import java.util.List;
+
 @Configuration
+@EnableWebSecurity
 public class SecurityConfig {
 
     @Autowired
-    private JwtAuthenticationFilter jwtFilter;
+    private JwtFilter jwtFilter;
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        
+        // Allow your React frontend
+        config.setAllowedOrigins(Arrays.asList("http://localhost:5173"));
+        
+        // Allow common HTTP methods
+        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        
+        // Allow all headers (including Authorization)
+        config.setAllowedHeaders(Arrays.asList("*"));
+        
+        // Allow credentials (cookies, authorization headers)
+        config.setAllowCredentials(true);
+        
+        // Expose Authorization header in response
+        config.setExposedHeaders(Arrays.asList("Authorization"));
+        
+        // How long the response from a pre-flight request can be cached
+        config.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        
+        return source;
+    }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-
         http
-            // ✅ Enable Spring Boot managed CORS (NO manual bean)
-            .cors(Customizer.withDefaults())
-
-            // ❌ Disable CSRF (JWT based auth)
+            // Enable CORS using our configuration
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            
+            // Disable CSRF (not needed for stateless JWT auth)
             .csrf(csrf -> csrf.disable())
-
+            
             .authorizeHttpRequests(auth -> auth
-
-                // ✅ Allow CORS preflight
+                // Allow preflight OPTIONS requests
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                // ---------- PUBLIC AUTH ENDPOINTS ----------
-                .requestMatchers(HttpMethod.POST, "/api/auth/signup").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
-                .requestMatchers("/api/auth/token").permitAll()
-
-                // ---------- PROTECTED AUTH ----------
-                .requestMatchers("/api/auth/me").authenticated()
-
-                // ---------- CUSTOMER ----------
-                .requestMatchers("/api/users/me").hasAnyAuthority("CUSTOMER", "ADMIN")
-                .requestMatchers("/api/users/update/me").hasAuthority("CUSTOMER")
-
-                // ---------- ADMIN ----------
-                .requestMatchers("/api/admin/**").hasAuthority("ADMIN")
-                .requestMatchers("/api/users/all").hasAuthority("ADMIN")
-                .requestMatchers("/api/users/delete/**").hasAuthority("ADMIN")
-
-                // ---------- EVERYTHING ELSE ----------
+                
+                // Public authentication endpoints
+                .requestMatchers("/api/auth/**").permitAll()
+                
+                // All other requests need authentication
                 .anyRequest().authenticated()
             )
-
-            // ✅ JWT filter
+            
+            // Add JWT filter before UsernamePasswordAuthenticationFilter
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
-
-            // (Optional) Basic auth disabled by default
-            .httpBasic(Customizer.withDefaults());
+            
+            // Disable HTTP Basic authentication
+            .httpBasic(httpBasic -> httpBasic.disable());
 
         return http.build();
     }
 
-    // ✅ Password Encoder
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // ✅ Authentication Manager
     @Bean
-    public AuthenticationManager authManager(AuthenticationConfiguration config)
-            throws Exception {
+    public AuthenticationManager authenticationManager(
+            AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
 }

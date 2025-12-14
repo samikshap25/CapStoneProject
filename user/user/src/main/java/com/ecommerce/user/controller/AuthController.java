@@ -5,15 +5,16 @@ import com.ecommerce.user.repository.UserRepository;
 import com.ecommerce.user.security.JwtUtil;
 import com.ecommerce.user.service.UserService;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.security.authentication.*;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpServletRequest;
+import java.util.HashMap;
 import java.util.Map;
 
-@CrossOrigin(origins = "http://localhost:5173")
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -24,56 +25,83 @@ public class AuthController {
     @Autowired private UserRepository userRepository;
 
     @PostMapping("/signup")
-    public User register(@RequestBody User user) {
-        return userService.register(user);
+    public ResponseEntity<?> signup(@RequestBody User user) {
+        try {
+            User registeredUser = userService.register(user);
+            
+            // ✅ Return success response with user info (without password)
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "User registered successfully");
+            response.put("username", registeredUser.getUsername());
+            response.put("role", registeredUser.getRole());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody User request) {
 
-        authManager.authenticate(
+        try {
+            authManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
-                        request.getUsername(),
-                        request.getPassword()
+                    request.getUsername(),
+                    request.getPassword()
                 )
-        );
+            );
+        } catch (BadCredentialsException e) {
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Invalid credentials"));
+        }
 
-        String token = jwtUtil.generateToken(request.getUsername());
-        return ResponseEntity.ok(Map.of("token", token));
+        // ✅ Get user details to extract role
+        User user = userRepository.findByUsername(request.getUsername());
+        
+        // ✅ Generate token WITH role
+        String token = jwtUtil.generateToken(user.getUsername(), user.getRole());
+        
+        // ✅ Return token and user info
+        Map<String, Object> response = new HashMap<>();
+        response.put("token", token);
+        response.put("username", user.getUsername());
+        response.put("role", user.getRole());
+        response.put("name", user.getName());
+        
+        return ResponseEntity.ok(response);
     }
 
-    // -------------------- NEW API --------------------
-
     @GetMapping("/me")
-    public ResponseEntity<?> getCurrentUser(HttpServletRequest req) {
+    public ResponseEntity<?> me(HttpServletRequest request) {
 
-        // Get "Authorization" header
-        String authHeader = req.getHeader("Authorization");
+        String header = request.getHeader("Authorization");
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        if (header == null || !header.startsWith("Bearer ")) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "Missing or invalid token"));
+                    .body(Map.of("error", "Missing token"));
         }
 
-        // Extract JWT token
-        String token = authHeader.substring(7);
-
-        // Extract username from token
+        String token = header.substring(7);
         String username = jwtUtil.extractUsername(token);
+        
+        // ✅ Extract role from token
+        String role = jwtUtil.extractRole(token);
 
-        // Fetch user from DB
         User user = userRepository.findByUsername(username);
 
-        if (user == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "User not found"));
-        }
+        // ✅ Return user info without password
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", user.getId());
+        response.put("name", user.getName());
+        response.put("username", user.getUsername());
+        response.put("email", user.getEmail());
+        response.put("phone", user.getPhone());
+        response.put("role", user.getRole());
 
-        // Return user info (but NOT password)
-        return ResponseEntity.ok(Map.of(
-                "id", user.getId(),
-                "username", user.getUsername(),
-                "role", user.getRole()
-        ));
+        return ResponseEntity.ok(response);
     }
 }
