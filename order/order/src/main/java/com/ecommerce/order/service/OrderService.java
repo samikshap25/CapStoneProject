@@ -31,6 +31,29 @@ public class OrderService {
         this.restTemplate = restTemplate;
     }
 
+public void markOrderPaid(Long orderId) {
+
+    Order order = orderRepo.findById(orderId)
+            .orElseThrow(() -> new RuntimeException("Order not found"));
+
+    // 1. Mark order as PAID
+    order.setStatus("PAID");
+    orderRepo.save(order);
+
+    // 2. Clear cart after payment
+    Integer userId = order.getUserId().intValue();
+
+    String cartClearUrl = "http://ORDER-SERVICE/cart/" + userId + "/clear";
+
+    try {
+        restTemplate.delete(cartClearUrl);
+    } catch (Exception e) {
+        throw new RuntimeException("Payment successful, but failed to clear cart");
+    }
+}
+
+
+
     // ----------------------- CREATE ORDER -----------------------
     public OrderDto createOrder(OrderDto dto) {
 

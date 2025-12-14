@@ -1,6 +1,7 @@
 package com.ecommerce.inventory.controller;
 
 import com.ecommerce.inventory.dto.InventoryDto;
+import com.ecommerce.inventory.dto.ReserveRequest;
 import com.ecommerce.inventory.model.Inventory;
 import com.ecommerce.inventory.service.InventoryService;
 import org.springframework.http.ResponseEntity;
@@ -34,18 +35,18 @@ public class InventoryController {
     }
 
     // POST: Reserve stock
-    @PostMapping("/reserve")
-    public ResponseEntity<String> reserveStock(@RequestBody InventoryDto dto) {
-        boolean reserved = service.reserveStock(dto.getProductId(), dto.getQuantity());
-
-        if (!reserved) {
-            return ResponseEntity
-                    .badRequest()
-                    .body("Not enough stock available");
-        }
-
-        return ResponseEntity.ok("Stock reserved successfully");
+  @PostMapping("/reserve")
+    public ResponseEntity<Boolean> reserveStock(@RequestBody ReserveRequest request) {
+        try {
+            boolean success = service.reserveStock(
+                request.getProductId(), 
+                request.getQuantity()
+            );
+            return ResponseEntity.ok(success);
+        } catch (Exception e) {
+            return ResponseEntity.ok(false);
     }
+}
 
     // POST: Release stock
     @PostMapping("/release")

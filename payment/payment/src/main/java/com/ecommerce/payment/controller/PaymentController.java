@@ -1,6 +1,8 @@
 package com.ecommerce.payment.controller;
 
+import com.ecommerce.payment.dto.CreatePaymentRequestDto;
 import com.ecommerce.payment.dto.PaymentDto;
+import com.ecommerce.payment.dto.VerifyPaymentRequestDto;
 import com.ecommerce.payment.service.PaymentService;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,15 +18,20 @@ public class PaymentController {
         this.service = service;
     }
 
-    @PostMapping
-    public PaymentDto makePayment(@RequestBody PaymentDto dto) {
-        return service.makePayment(dto);
-    }
+    @PostMapping("/create")
+public PaymentDto createPayment(@RequestBody CreatePaymentRequestDto request) {
+    return service.createPayment(request);
+}
 
     @GetMapping("/{id}")
     public PaymentDto getPayment(@PathVariable Long id) {
         return service.getPayment(id);
     }
+
+    @PostMapping("/verify")
+public PaymentDto verifyPayment(@RequestBody VerifyPaymentRequestDto request) {
+    return service.verifyPayment(request);
+}
 
     @GetMapping
     public List<PaymentDto> getAllPayments() {

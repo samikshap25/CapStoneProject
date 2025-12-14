@@ -10,7 +10,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/orders")
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = "http://localhost:5173")
 public class OrderController {
 
     private final OrderService orderService;
@@ -29,6 +29,11 @@ public class OrderController {
             return ResponseEntity.badRequest().body("Error: " + e.getMessage());
         }
     }
+    @PutMapping("/{orderId}/paid")
+public ResponseEntity<?> markOrderPaid(@PathVariable Long orderId) {
+    orderService.markOrderPaid(orderId);
+    return ResponseEntity.ok("Order marked as PAID");
+}
 
     // Get all orders
     @GetMapping
@@ -54,4 +59,6 @@ public class OrderController {
     public ResponseEntity<String> healthCheck() {
         return ResponseEntity.ok("Order Service is running!");
     }
+
+
 }

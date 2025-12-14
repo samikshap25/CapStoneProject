@@ -24,45 +24,52 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            FilterChain filterChain
-    ) throws ServletException, IOException {
+protected void doFilterInternal(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        FilterChain filterChain
+) throws ServletException, IOException {
 
-        final String authHeader = request.getHeader("Authorization");
-
-        String token = null;
-        String username = null;
-
-        // Check if token exists
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            token = authHeader.substring(7);
-
-            try {
-                username = jwtUtil.extractUsername(token);
-            } catch (Exception e) {
-                // Invalid token
-            }
-        }
-
-        // Validate and set authentication
-        if (username != null && jwtUtil.validateToken(token)) {
-
-            UsernamePasswordAuthenticationToken auth =
-                    new UsernamePasswordAuthenticationToken(
-                            new User(username, "", Collections.emptyList()),
-                            null,
-                            Collections.emptyList()
-                    );
-
-            auth.setDetails(
-                    new WebAuthenticationDetailsSource().buildDetails(request)
-            );
-
-            SecurityContextHolder.getContext().setAuthentication(auth);
-        }
-
+    // ✅ CRITICAL: Skip JWT validation for OPTIONS requests
+    if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
         filterChain.doFilter(request, response);
+        return;
     }
+
+    final String authHeader = request.getHeader("Authorization");
+
+    String token = null;
+    String username = null;
+
+    if (authHeader != null && authHeader.startsWith("Bearer ")) {
+        token = authHeader.substring(7);
+
+        try {
+            username = jwtUtil.extractUsername(token);
+        } catch (Exception e) {
+            System.out.println("JWT Error: " + e.getMessage());
+        }
+    }
+
+    if (username != null && jwtUtil.validateToken(token)
+            && SecurityContextHolder.getContext().getAuthentication() == null) {
+
+        UsernamePasswordAuthenticationToken auth =
+                new UsernamePasswordAuthenticationToken(
+                        new org.springframework.security.core.userdetails.User(
+                            username, "", java.util.Collections.emptyList()
+                        ),
+                        null,
+                        java.util.Collections.emptyList()
+                );
+
+        auth.setDetails(
+                new WebAuthenticationDetailsSource().buildDetails(request)
+        );
+
+        SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
+    filterChain.doFilter(request, response);
+}
 }
