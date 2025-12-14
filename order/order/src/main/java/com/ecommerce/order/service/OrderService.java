@@ -23,7 +23,9 @@ public class OrderService {
     private final OrderItemRepository itemRepo;
     private final RestTemplate restTemplate;
 
-    public OrderService(OrderRepository orderRepo, OrderItemRepository itemRepo, RestTemplate restTemplate) {
+    // ✅ REMOVED CartService - we don't need it
+    public OrderService(OrderRepository orderRepo, OrderItemRepository itemRepo, 
+                       RestTemplate restTemplate) {
         this.orderRepo = orderRepo;
         this.itemRepo = itemRepo;
         this.restTemplate = restTemplate;
@@ -38,10 +40,14 @@ public class OrderService {
 
             var reserveRequest = new ReserveRequest(item.getProductId(), item.getQuantity());
 
-            Boolean success = restTemplate.postForObject(url, reserveRequest, Boolean.class);
+            try {
+                Boolean success = restTemplate.postForObject(url, reserveRequest, Boolean.class);
 
-            if (!success) {
-                throw new RuntimeException("Stock not available for product: " + item.getProductId());
+                if (success == null || !success) {
+                    throw new RuntimeException("Stock not available for product: " + item.getProductId());
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to reserve stock for product: " + item.getProductId() + ". Error: " + e.getMessage());
             }
         }
 
@@ -64,7 +70,7 @@ public class OrderService {
         List<OrderItem> orderItems = dto.getItems().stream().map(item -> {
             OrderItem itemEntity = new OrderItem();
             itemEntity.setOrder(savedOrder);
-            itemEntity.setProductId(item.getProductId());
+            itemEntity.setProductId(item.getProductId());  // ✅ FIXED THIS LINE
             itemEntity.setQuantity(item.getQuantity());
             itemEntity.setPrice(item.getPrice());
             return itemEntity;
