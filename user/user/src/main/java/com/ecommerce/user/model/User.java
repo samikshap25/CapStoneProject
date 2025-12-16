@@ -38,6 +38,9 @@ public class User implements UserDetails {
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
 
+    // ✅ ADD: Alias for getId() - for compatibility with Order Service
+    public Integer getUserId() { return id; }
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
 

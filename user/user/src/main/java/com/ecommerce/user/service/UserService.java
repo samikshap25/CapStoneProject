@@ -16,6 +16,10 @@ public class UserService {
     private PasswordEncoder passwordEncoder;
 
     public User register(User user) {
+        // Check if username already exists
+        if (userRepository.findByUsername(user.getUsername()) != null) {
+            throw new RuntimeException("Username already exists");
+        }
 
         User newUser = new User();
 
@@ -25,9 +29,23 @@ public class UserService {
         newUser.setUsername(user.getUsername());
         newUser.setPassword(passwordEncoder.encode(user.getPassword()));
 
-        //  ROLE MUST MATCH SECURITY
-        newUser.setRole("CUSTOMER");
+        // ✅ Set role - use provided role or default to USER
+        // Note: Your frontend might send "ADMIN" or "USER"
+        String role = user.getRole();
+        if (role == null || role.isEmpty()) {
+            role = "USER";  // Default role
+        }
+        newUser.setRole(role);
 
         return userRepository.save(newUser);
+    }
+
+    // ✅ Additional helper methods
+    public User findByUsername(String username) {
+        return userRepository.findByUsername(username);
+    }
+
+    public boolean existsByUsername(String username) {
+        return userRepository.findByUsername(username) != null;
     }
 }

@@ -17,6 +17,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
+@CrossOrigin(origins = "http://localhost:5173")
 public class AuthController {
 
     @Autowired private AuthenticationManager authManager;
@@ -29,9 +30,18 @@ public class AuthController {
         try {
             User registeredUser = userService.register(user);
             
-            // ✅ Return success response with user info (without password)
+            // ✅ Generate token with userId included
+            String token = jwtUtil.generateToken(
+                registeredUser.getId(),           // ✅ userId
+                registeredUser.getUsername(),
+                registeredUser.getRole()
+            );
+            
+            // ✅ Return success response with token and user info
             Map<String, Object> response = new HashMap<>();
             response.put("message", "User registered successfully");
+            response.put("token", token);
+            response.put("userId", registeredUser.getId());
             response.put("username", registeredUser.getUsername());
             response.put("role", registeredUser.getRole());
             
@@ -59,15 +69,20 @@ public class AuthController {
                     .body(Map.of("error", "Invalid credentials"));
         }
 
-        // ✅ Get user details to extract role
+        // ✅ Get user details to extract role and id
         User user = userRepository.findByUsername(request.getUsername());
         
-        // ✅ Generate token WITH role
-        String token = jwtUtil.generateToken(user.getUsername(), user.getRole());
+        // ✅ Generate token WITH userId and role
+        String token = jwtUtil.generateToken(
+            user.getId(),          // ✅ userId
+            user.getUsername(),
+            user.getRole()
+        );
         
         // ✅ Return token and user info
         Map<String, Object> response = new HashMap<>();
         response.put("token", token);
+        response.put("userId", user.getId());
         response.put("username", user.getUsername());
         response.put("role", user.getRole());
         response.put("name", user.getName());
@@ -88,14 +103,16 @@ public class AuthController {
         String token = header.substring(7);
         String username = jwtUtil.extractUsername(token);
         
-        // ✅ Extract role from token
+        // ✅ Extract role and userId from token
         String role = jwtUtil.extractRole(token);
+        Integer userId = jwtUtil.extractUserId(token);
 
         User user = userRepository.findByUsername(username);
 
         // ✅ Return user info without password
         Map<String, Object> response = new HashMap<>();
         response.put("id", user.getId());
+        response.put("userId", userId);  // From token
         response.put("name", user.getName());
         response.put("username", user.getUsername());
         response.put("email", user.getEmail());
