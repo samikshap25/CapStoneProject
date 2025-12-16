@@ -27,13 +27,15 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
         http
-            .cors(cors -> cors.configurationSource(corsConfigurationSource())) // ✅ FIXED
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
 
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // ✅ CRITICAL: Allow preflight
-                .requestMatchers("/orders/health", "/actuator/**", "/eureka/**").permitAll()
-                .anyRequest().authenticated()
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // Allow preflight
+                .requestMatchers("/orders/health", "/cart/health").permitAll() // Health checks
+                .requestMatchers("/actuator/**", "/eureka/**").permitAll() // Monitoring
+                .requestMatchers("/api/auth/**").permitAll() // ✅ Allow token validation
+                .anyRequest().authenticated() // All other requests need JWT
             )
 
             .sessionManagement(session ->
@@ -45,7 +47,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // ✅ PROPER CORS CONFIGURATION
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
@@ -53,7 +54,7 @@ public class SecurityConfig {
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
-        config.setMaxAge(3600L); // Cache preflight for 1 hour
+        config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

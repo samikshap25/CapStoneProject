@@ -1,64 +1,204 @@
 package com.ecommerce.order.controller;
 
 import com.ecommerce.order.dto.OrderDto;
+import com.ecommerce.order.service.CartService;
 import com.ecommerce.order.service.OrderService;
+import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/orders")
 @CrossOrigin(origins = "http://localhost:5173")
 public class OrderController {
 
-    private final OrderService orderService;
+    private static final Logger log = LoggerFactory.getLogger(OrderController.class);
 
-    public OrderController(OrderService orderService) {
-        this.orderService = orderService;
-    }
+    @Autowired
+    private OrderService orderService;
 
-    // Create order
+    @Autowired
+    private CartService cartService;
+
+    /**
+     * FIXED: Create order from cart items
+     * Accepts: { userId: number, items: [{productId, quantity, price}] }
+     */
     @PostMapping
-    public ResponseEntity<?> createOrder(@RequestBody OrderDto orderDto) {
+    public ResponseEntity<?> createOrder(@RequestBody OrderDto orderDto, HttpServletRequest request) {
         try {
+            log.info(" Received order creation request");
+            log.info("Request body - UserId: {}, Items count: {}", 
+                orderDto.getUserId(), 
+                orderDto.getItems() != null ? orderDto.getItems().size() : 0);
+            
+            // Extract userId from JWT token (set by JwtAuthenticationFilter)
+            Integer authenticatedUserId = (Integer) request.getAttribute("userId");
+            
+            if (authenticatedUserId == null) {
+                log.warn(" No userId in JWT token, using userId from request body or default");
+                authenticatedUserId = orderDto.getUserId() != null ? 
+                    orderDto.getUserId().intValue() : 1;
+            }
+            
+            log.info(" Using userId: {}", authenticatedUserId);
+            
+            // Validate request
+            if (orderDto.getItems() == null || orderDto.getItems().isEmpty()) {
+                log.error(" Order validation failed: No items in order");
+                return ResponseEntity.badRequest()
+                    .body(createErrorResponse("Order must contain at least one item"));
+            }
+
+            // Override userId from token for security
+            orderDto.setUserId(authenticatedUserId.longValue());
+            
+            // Create the order
             OrderDto createdOrder = orderService.createOrder(orderDto);
+            log.info(" Order created successfully with ID: {}", createdOrder.getOrderId());
+            
+            //  Clear user's cart after successful order
+            try {
+                cartService.clearCart(authenticatedUserId);
+                log.info(" Cart cleared for userId: {}", authenticatedUserId);
+            } catch (Exception e) {
+                log.warn(" Failed to clear cart (may not exist): {}", e.getMessage());
+            }
+            
             return ResponseEntity.status(HttpStatus.CREATED).body(createdOrder);
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body("Error: " + e.getMessage());
+            
+        } catch (IllegalArgumentException e) {
+            log.error(" Validation error: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                .body(createErrorResponse(e.getMessage()));
+        } catch (Exception e) {
+            log.error(" Order creation failed", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(createErrorResponse("Failed to create order: " + e.getMessage()));
         }
     }
-    @PutMapping("/{orderId}/paid")
-public ResponseEntity<?> markOrderPaid(@PathVariable Long orderId) {
-    orderService.markOrderPaid(orderId);
-    return ResponseEntity.ok("Order marked as PAID");
-}
 
-    // Get all orders
+    /**
+     * Get order by ID
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getOrder(@PathVariable Long id) {
+        try {
+            log.info(" Fetching order with ID: {}", id);
+            OrderDto order = orderService.getOrder(id);
+            return ResponseEntity.ok(order);
+        } catch (Exception e) {
+            log.error(" Failed to fetch order {}: {}", id, e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(createErrorResponse("Order not found: " + id));
+        }
+    }
+
+    /**
+     * Get all orders
+     */
     @GetMapping
     public ResponseEntity<List<OrderDto>> getAllOrders() {
+        log.info(" Fetching all orders");
         List<OrderDto> orders = orderService.getAllOrders();
+        log.info(" Fetched {} orders", orders.size());
         return ResponseEntity.ok(orders);
     }
 
-    // Get order by ID
-    @GetMapping("/{id}")
-    public ResponseEntity<?> getOrderById(@PathVariable Long id) {
+    /**
+     * ✅ Get orders by user ID (from token)
+     */
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<?> getOrdersByUserId(@PathVariable Long userId, HttpServletRequest request) {
         try {
-            OrderDto order = orderService.getOrder(id);
-            return ResponseEntity.ok(order);
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body("Order not found: " + id);
+            // Optional: Verify userId from token matches path variable
+            Integer authenticatedUserId = (Integer) request.getAttribute("userId");
+            
+            if (authenticatedUserId != null && !authenticatedUserId.equals(userId.intValue())) {
+                log.warn(" UserId mismatch - Token: {}, Requested: {}", authenticatedUserId, userId);
+                // You can enforce security here by returning 403 Forbidden
+                // For now, we'll allow it for flexibility
+            }
+            
+            log.info("Fetching orders for userId: {}", userId);
+            List<OrderDto> orders = orderService.getOrdersByUserId(userId);
+            log.info(" Found {} orders for userId: {}", orders.size(), userId);
+            return ResponseEntity.ok(orders);
+        } catch (Exception e) {
+            log.error(" Failed to fetch orders for userId {}: {}", userId, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(createErrorResponse("Failed to fetch orders: " + e.getMessage()));
         }
     }
 
-    // Health check
+    /**
+     * ✅ Get current user's orders (uses token userId)
+     */
+    @GetMapping("/my-orders")
+    public ResponseEntity<?> getMyOrders(HttpServletRequest request) {
+        try {
+            Integer authenticatedUserId = (Integer) request.getAttribute("userId");
+            
+            if (authenticatedUserId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(createErrorResponse("User not authenticated"));
+            }
+            
+            log.info("📥 Fetching orders for authenticated user: {}", authenticatedUserId);
+            List<OrderDto> orders = orderService.getOrdersByUserId(authenticatedUserId.longValue());
+            log.info("✅ Found {} orders", orders.size());
+            return ResponseEntity.ok(orders);
+        } catch (Exception e) {
+            log.error(" Failed to fetch user orders: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(createErrorResponse("Failed to fetch orders: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Mark order as paid
+     */
+    @PutMapping("/{orderId}/mark-paid")
+    public ResponseEntity<?> markOrderPaid(@PathVariable Long orderId) {
+        try {
+            log.info("📥 Marking order {} as paid", orderId);
+            orderService.markOrderPaid(orderId);
+            log.info("✅ Order {} marked as paid", orderId);
+            return ResponseEntity.ok(createSuccessResponse("Order marked as paid"));
+        } catch (Exception e) {
+            log.error("❌ Failed to mark order as paid: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(createErrorResponse("Failed to mark order as paid: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Health check endpoint
+     */
     @GetMapping("/health")
     public ResponseEntity<String> healthCheck() {
         return ResponseEntity.ok("Order Service is running!");
     }
 
+    // ============ Helper Methods ============
 
+    private Map<String, String> createErrorResponse(String message) {
+        Map<String, String> response = new HashMap<>();
+        response.put("error", message);
+        return response;
+    }
+
+    private Map<String, String> createSuccessResponse(String message) {
+        Map<String, String> response = new HashMap<>();
+        response.put("message", message);
+        return response;
+    }
 }

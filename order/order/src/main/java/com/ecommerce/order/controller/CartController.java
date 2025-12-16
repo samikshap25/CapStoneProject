@@ -1,7 +1,13 @@
 package com.ecommerce.order.controller;
 
+import com.ecommerce.order.dto.AddToCartRequest;
 import com.ecommerce.order.dto.CartDto;
+import com.ecommerce.order.dto.UpdateCartItemRequest;
 import com.ecommerce.order.service.CartService;
+
+import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -12,125 +18,139 @@ import org.springframework.web.bind.annotation.*;
 @CrossOrigin(origins = "http://localhost:5173")
 public class CartController {
 
+    private static final Logger log = LoggerFactory.getLogger(CartController.class);
+
     @Autowired
     private CartService cartService;
 
+    // =========================
     // Add item to cart
+    // =========================
     @PostMapping("/add")
-    public ResponseEntity<?> addToCart(@RequestBody AddToCartRequest request) {
+    public ResponseEntity<?> addToCart(
+            @RequestBody AddToCartRequest request,
+            HttpServletRequest httpRequest) {
+
         try {
+            log.info("📥 Adding to cart - userId: {}, productId: {}, quantity: {}", 
+                    request.getUserId(), request.getProductId(), request.getQuantity());
+
+            // Extract userId from JWT token if available
+            Integer authenticatedUserId = (Integer) httpRequest.getAttribute("userId");
+            
+            // Use authenticated userId or fall back to request userId
+            Integer userId = (authenticatedUserId != null) ? authenticatedUserId : request.getUserId();
+            
+            if (userId == null) {
+                log.error("❌ No userId provided");
+                return ResponseEntity.badRequest().body("User ID is required");
+            }
+
             CartDto cart = cartService.addToCart(
-                request.getUserId(),
-                request.getProductId(),
-                request.getQuantity()
+                    userId,
+                    request.getProductId(),
+                    request.getQuantity()
             );
+
+            log.info("✅ Item added to cart successfully");
             return ResponseEntity.ok(cart);
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest()
-                    .body(new ErrorResponse("Error adding to cart: " + e.getMessage()));
+            
+        } catch (Exception e) {
+            log.error("❌ Error adding to cart: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to add to cart: " + e.getMessage());
         }
     }
 
+    // =========================
     // Get user's cart
+    // =========================
     @GetMapping("/{userId}")
     public ResponseEntity<?> getCart(@PathVariable Integer userId) {
         try {
+            log.info("📥 Fetching cart for userId: {}", userId);
             CartDto cart = cartService.getCart(userId);
+            log.info("✅ Cart fetched successfully with {} items", 
+                    cart.getItems() != null ? cart.getItems().size() : 0);
             return ResponseEntity.ok(cart);
         } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new ErrorResponse("Cart not found for user: " + userId));
+            log.error("❌ Error fetching cart: {}", e.getMessage());
+            // Return empty cart instead of error
+            CartDto emptyCart = new CartDto();
+            emptyCart.setUserId(userId);
+            emptyCart.setItems(java.util.Collections.emptyList());
+            emptyCart.setTotalAmount(java.math.BigDecimal.ZERO);
+            return ResponseEntity.ok(emptyCart);
         }
     }
 
+    // =========================
     // Update cart item quantity
+    // =========================
     @PutMapping("/{userId}/items/{cartItemId}")
     public ResponseEntity<?> updateCartItem(
             @PathVariable Integer userId,
             @PathVariable Long cartItemId,
             @RequestBody UpdateCartItemRequest request) {
+
         try {
-            CartDto cart = cartService.updateCartItem(userId, cartItemId, request.getQuantity());
+            log.info("📥 Updating cart item {} for user {}", cartItemId, userId);
+            CartDto cart = cartService.updateCartItem(
+                    userId,
+                    cartItemId,
+                    request.getQuantity()
+            );
+            log.info("✅ Cart item updated successfully");
             return ResponseEntity.ok(cart);
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest()
-                    .body(new ErrorResponse("Error updating cart item: " + e.getMessage()));
+        } catch (Exception e) {
+            log.error("❌ Error updating cart item: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to update cart item: " + e.getMessage());
         }
     }
 
+    // =========================
     // Remove item from cart
+    // =========================
     @DeleteMapping("/{userId}/items/{cartItemId}")
     public ResponseEntity<?> removeFromCart(
             @PathVariable Integer userId,
             @PathVariable Long cartItemId) {
+
         try {
+            log.info("📥 Removing cart item {} for user {}", cartItemId, userId);
             CartDto cart = cartService.removeFromCart(userId, cartItemId);
+            log.info("✅ Cart item removed successfully");
             return ResponseEntity.ok(cart);
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest()
-                    .body(new ErrorResponse("Error removing from cart: " + e.getMessage()));
+        } catch (Exception e) {
+            log.error("❌ Error removing cart item: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to remove cart item: " + e.getMessage());
         }
     }
 
+    // =========================
     // Clear entire cart
+    // =========================
     @DeleteMapping("/{userId}/clear")
     public ResponseEntity<?> clearCart(@PathVariable Integer userId) {
         try {
+            log.info("📥 Clearing cart for user {}", userId);
             cartService.clearCart(userId);
-            return ResponseEntity.ok(new SuccessResponse("Cart cleared successfully"));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest()
-                    .body(new ErrorResponse("Error clearing cart: " + e.getMessage()));
+            log.info("✅ Cart cleared successfully");
+            return ResponseEntity.ok("Cart cleared successfully");
+        } catch (Exception e) {
+            log.error("❌ Error clearing cart: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to clear cart: " + e.getMessage());
         }
     }
 
+    // =========================
     // Health check
+    // =========================
     @GetMapping("/health")
     public ResponseEntity<String> healthCheck() {
         return ResponseEntity.ok("Cart Service is running!");
-    }
-
-    // Request DTOs
-    public static class AddToCartRequest {
-        private Integer userId;
-        private Long productId;
-        private Integer quantity;
-
-        public Integer getUserId() { return userId; }
-        public void setUserId(Integer userId) { this.userId = userId; }
-        public Long getProductId() { return productId; }
-        public void setProductId(Long productId) { this.productId = productId; }
-        public Integer getQuantity() { return quantity; }
-        public void setQuantity(Integer quantity) { this.quantity = quantity; }
-    }
-
-    public static class UpdateCartItemRequest {
-        private Integer quantity;
-
-        public Integer getQuantity() { return quantity; }
-        public void setQuantity(Integer quantity) { this.quantity = quantity; }
-    }
-
-    // Response DTOs
-    public static class ErrorResponse {
-        private String error;
-
-        public ErrorResponse(String error) {
-            this.error = error;
-        }
-
-        public String getError() { return error; }
-        public void setError(String error) { this.error = error; }
-    }
-
-    public static class SuccessResponse {
-        private String message;
-
-        public SuccessResponse(String message) {
-            this.message = message;
-        }
-
-        public String getMessage() { return message; }
-        public void setMessage(String message) { this.message = message; }
     }
 }
