@@ -3,94 +3,146 @@ package com.ecommerce.user.security;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
-import java.util.List;
-
-@Configuration
-@EnableWebSecurity
+@Configuration // <- This ensures that this class gets called during every API call
 public class SecurityConfig {
+	@Autowired
+	private JwtFilter jwtFilter;
 
-    @Autowired
-    private JwtFilter jwtFilter;
+	@Bean
+	SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+		http
+				.csrf((csrf) -> csrf.disable())
+                .cors(Customizer.withDefaults()) // <- this will use the corsConfigurationSource bean
+				.authorizeHttpRequests(authorize -> authorize
+						
+						//------------------- USER -------------------------
+						.requestMatchers("/api/user/signup").permitAll()
+						.requestMatchers("/api/user/token").authenticated()
+						.requestMatchers("/api/user/details").authenticated()
+						
+						//------------------- ADMIN -------------------------
+                        .requestMatchers("/api/admin/signup").permitAll()
+                        .requestMatchers("/api/admin/token").authenticated()
+                        .requestMatchers("/api/admin/details").authenticated()
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        
-        // Allow your React frontend
-        config.setAllowedOrigins(Arrays.asList("http://localhost:5173"));
-        
-        // Allow common HTTP methods
-        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        
-        // Allow all headers (including Authorization)
-        config.setAllowedHeaders(Arrays.asList("*"));
-        
-        // Allow credentials (cookies, authorization headers)
-        config.setAllowCredentials(true);
-        
-        // Expose Authorization header in response
-        config.setExposedHeaders(Arrays.asList("Authorization"));
-        
-        // How long the response from a pre-flight request can be cached
-        config.setMaxAge(3600L);
+						.anyRequest().authenticated())
+				.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+				.httpBasic(Customizer.withDefaults()); // <- this activated http basic technique
+		return http.build();
+	}
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        
-        return source;
-    }
+	@Bean
+	PasswordEncoder passwordEncoder() { // <- Bean saves this object in spring's context
+		return new BCryptPasswordEncoder();
+	}
 
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-            // Enable CORS using our configuration
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            
-            // Disable CSRF (not needed for stateless JWT auth)
-            .csrf(csrf -> csrf.disable())
-            
-            .authorizeHttpRequests(auth -> auth
-                // Allow preflight OPTIONS requests
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                
-                // Public authentication endpoints
-                .requestMatchers("/api/auth/**").permitAll()
-                
-                // All other requests need authentication
-                .anyRequest().authenticated()
-            )
-            
-            // Add JWT filter before UsernamePasswordAuthenticationFilter
-            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
-            
-            // Disable HTTP Basic authentication
-            .httpBasic(httpBasic -> httpBasic.disable());
-
-        return http.build();
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-
-    @Bean
-    public AuthenticationManager authenticationManager(
-            AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
-    }
+	@Bean
+	AuthenticationManager getAuthManager(AuthenticationConfiguration auth)
+			throws Exception {
+		return auth.getAuthenticationManager();
+	}
 }
+
+// import org.springframework.beans.factory.annotation.Autowired;
+// import org.springframework.context.annotation.Bean;
+// import org.springframework.context.annotation.Configuration;
+// import org.springframework.http.HttpMethod;
+// import org.springframework.security.authentication.AuthenticationManager;
+// import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+// import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+// import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+// import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+// import org.springframework.security.crypto.password.PasswordEncoder;
+// import org.springframework.security.web.SecurityFilterChain;
+// import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+// import org.springframework.web.cors.CorsConfiguration;
+// import org.springframework.web.cors.CorsConfigurationSource;
+// import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+// import java.util.Arrays;
+// import java.util.List;
+
+// @Configuration
+// @EnableWebSecurity
+// public class SecurityConfig {
+
+//     @Autowired
+//     private JwtFilter jwtFilter;
+
+//     @Bean
+//     public CorsConfigurationSource corsConfigurationSource() {
+//         CorsConfiguration config = new CorsConfiguration();
+        
+//         // Allow your React frontend
+//         config.setAllowedOrigins(Arrays.asList("http://localhost:5173"));
+        
+//         // Allow common HTTP methods
+//         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        
+//         // Allow all headers (including Authorization)
+//         config.setAllowedHeaders(Arrays.asList("*"));
+        
+//         // Allow credentials (cookies, authorization headers)
+//         config.setAllowCredentials(true);
+        
+//         // Expose Authorization header in response
+//         config.setExposedHeaders(Arrays.asList("Authorization"));
+        
+//         // How long the response from a pre-flight request can be cached
+//         config.setMaxAge(3600L);
+
+//         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+//         source.registerCorsConfiguration("/**", config);
+        
+//         return source;
+//     }
+
+//     @Bean
+//     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+//         http
+//             // Enable CORS using our configuration
+//             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            
+//             // Disable CSRF (not needed for stateless JWT auth)
+//             .csrf(csrf -> csrf.disable())
+            
+//             .authorizeHttpRequests(auth -> auth
+//                 // Allow preflight OPTIONS requests
+//                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                
+//                 // Public authentication endpoints
+//                 .requestMatchers("/api/auth/**").permitAll()
+                
+//                 // All other requests need authentication
+//                 .anyRequest().authenticated()
+//             )
+            
+//             // Add JWT filter before UsernamePasswordAuthenticationFilter
+//             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+            
+//             // Disable HTTP Basic authentication
+//             .httpBasic(httpBasic -> httpBasic.disable());
+
+//         return http.build();
+//     }
+
+//     @Bean
+//     public PasswordEncoder passwordEncoder() {
+//         return new BCryptPasswordEncoder();
+//     }
+
+//     @Bean
+//     public AuthenticationManager authenticationManager(
+//             AuthenticationConfiguration config) throws Exception {
+//         return config.getAuthenticationManager();
+//     }
+// }

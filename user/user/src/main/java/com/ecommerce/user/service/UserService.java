@@ -1,51 +1,72 @@
 package com.ecommerce.user.service;
 
-import com.ecommerce.user.model.User;
-import com.ecommerce.user.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import com.ecommerce.user.exception.ResourceNotFoundException;
+import com.ecommerce.user.model.User;
+import com.ecommerce.user.repository.UserRepository;
 
 @Service
 public class UserService {
 
-    @Autowired
-    private UserRepository userRepository;
+	private UserRepository userRepository;
+	private PasswordEncoder passwordEncoder;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+	public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+		super();
+		this.userRepository = userRepository;
+		this.passwordEncoder = passwordEncoder;
+	}
 
-    public User register(User user) {
-        // Check if username already exists
-        if (userRepository.findByUsername(user.getUsername()) != null) {
-            throw new RuntimeException("Username already exists");
-        }
+	public User signUp(User user) {
+		// Check if user already exists
+		User existingUser = userRepository.findByUsername(user.getUsername());
+		if (existingUser != null) {
+			throw new RuntimeException("Username already exists");
+		}
+		
+		// Encrypt the plain text password
+		String plainPassword = user.getPassword();
+		String encodedPassword = passwordEncoder.encode(plainPassword);
+		user.setPassword(encodedPassword);
 
-        User newUser = new User();
+		// Save User in DB
+		return userRepository.save(user);
+	}
 
-        newUser.setName(user.getName());
-        newUser.setEmail(user.getEmail());
-        newUser.setPhone(user.getPhone());
-        newUser.setUsername(user.getUsername());
-        newUser.setPassword(passwordEncoder.encode(user.getPassword()));
-
-        // ✅ Set role - use provided role or default to USER
-        // Note: Your frontend might send "ADMIN" or "USER"
-        String role = user.getRole();
-        if (role == null || role.isEmpty()) {
-            role = "USER";  // Default role
-        }
-        newUser.setRole(role);
-
-        return userRepository.save(newUser);
-    }
-
-    // ✅ Additional helper methods
-    public User findByUsername(String username) {
-        return userRepository.findByUsername(username);
-    }
-
-    public boolean existsByUsername(String username) {
-        return userRepository.findByUsername(username) != null;
-    }
+	public User getUserInfo(String username) {
+		User user = userRepository.findByUsername(username);
+		if (user == null) {
+			throw new ResourceNotFoundException("User not found with username: " + username);
+		}
+		
+		// Return user without password for security
+		user.setPassword(null);
+		return user;
+	}
+	
+	public User getUserById(int id) {
+		return userRepository.findById(id)
+			.orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
+	}
+	
+	public User updateUser(int id, User userDetails) {
+		User user = getUserById(id);
+		
+		if (userDetails.getUsername() != null) {
+			user.setUsername(userDetails.getUsername());
+		}
+		
+		if (userDetails.getPassword() != null) {
+			String encodedPassword = passwordEncoder.encode(userDetails.getPassword());
+			user.setPassword(encodedPassword);
+		}
+		
+		if (userDetails.getRole() != null) {
+			user.setRole(userDetails.getRole());
+		}
+		
+		return userRepository.save(user);
+	}
 }
