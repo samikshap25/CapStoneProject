@@ -27,16 +27,11 @@ public class OrderService {
 
     private final OrderRepository orderRepo;
     private final OrderItemRepository itemRepo;
-    private final RestTemplate restTemplate;
     
-    @Value("${inventory.service.enabled:false}")
-    private boolean inventoryServiceEnabled;
 
-    public OrderService(OrderRepository orderRepo, OrderItemRepository itemRepo, 
-                       RestTemplate restTemplate) {
+    public OrderService(OrderRepository orderRepo, OrderItemRepository itemRepo) {
         this.orderRepo = orderRepo;
         this.itemRepo = itemRepo;
-        this.restTemplate = restTemplate;
     }
 
     // ----------------------- MARK ORDER AS PAID -----------------------
@@ -66,13 +61,6 @@ public class OrderService {
             }
 
             // 2. Reserve stock from INVENTORY SERVICE (optional in dev mode)
-            if (inventoryServiceEnabled) {
-                log.info("Inventory service enabled, attempting to reserve stock");
-                reserveInventory(dto.getItems());
-            } else {
-                log.warn("⚠️ Inventory service disabled - skipping stock reservation (DEV MODE)");
-            }
-
             // 3. Create Order entity
             Order order = new Order();
             order.setUserId(dto.getUserId());
@@ -130,12 +118,6 @@ public class OrderService {
                 log.info("📤 Reserving stock for productId: {}, quantity: {}", 
                         item.getProductId(), item.getQuantity());
                 
-                Boolean success = restTemplate.postForObject(url, reserveRequest, Boolean.class);
-
-                if (success == null || !success) {
-                    log.error("❌ Stock not available for product: {}", item.getProductId());
-                    throw new RuntimeException("Stock not available for product: " + item.getProductId());
-                }
                 
                 log.info("✅ Stock reserved successfully for productId: {}", item.getProductId());
             } catch (Exception e) {

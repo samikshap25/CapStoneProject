@@ -74,6 +74,12 @@
             <scope>runtime</scope>
         </dependency>
 
+                <!-- Feign Client (for future inter-service calls) -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
         <!-- JWT -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

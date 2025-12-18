@@ -13,9 +13,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * REST Controller for Cart operations
+ * Handles shopping cart management
+ */
 @RestController
-@RequestMapping("/cart")
-@CrossOrigin(origins = "http://localhost:5173")
+@RequestMapping("/api/cart")  // ✅ FIXED: Added /api prefix
 public class CartController {
 
     private static final Logger log = LoggerFactory.getLogger(CartController.class);
@@ -23,9 +26,10 @@ public class CartController {
     @Autowired
     private CartService cartService;
 
-    // =========================
-    // Add item to cart
-    // =========================
+    /**
+     * Add item to cart
+     * POST /api/cart/add
+     */
     @PostMapping("/add")
     public ResponseEntity<?> addToCart(
             @RequestBody AddToCartRequest request,
@@ -35,7 +39,7 @@ public class CartController {
             log.info("📥 Adding to cart - userId: {}, productId: {}, quantity: {}", 
                     request.getUserId(), request.getProductId(), request.getQuantity());
 
-            // Extract userId from JWT token if available
+            // Extract userId from JWT token if available (set by Gateway)
             Integer authenticatedUserId = (Integer) httpRequest.getAttribute("userId");
             
             // Use authenticated userId or fall back to request userId
@@ -55,18 +59,23 @@ public class CartController {
             log.info("✅ Item added to cart successfully");
             return ResponseEntity.ok(cart);
             
+        } catch (RuntimeException e) {
+            log.error("❌ Error adding to cart: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(e.getMessage());
         } catch (Exception e) {
-            log.error("❌ Error adding to cart: {}", e.getMessage(), e);
+            log.error("❌ Unexpected error: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Failed to add to cart: " + e.getMessage());
         }
     }
 
-    // =========================
-    // Get user's cart
-    // =========================
+    /**
+     * Get user's cart
+     * GET /api/cart/{userId}
+     */
     @GetMapping("/{userId}")
-    public ResponseEntity<?> getCart(@PathVariable Integer userId) {
+    public ResponseEntity<CartDto> getCart(@PathVariable Integer userId) {
         try {
             log.info("📥 Fetching cart for userId: {}", userId);
             CartDto cart = cartService.getCart(userId);
@@ -84,9 +93,10 @@ public class CartController {
         }
     }
 
-    // =========================
-    // Update cart item quantity
-    // =========================
+    /**
+     * Update cart item quantity
+     * PUT /api/cart/{userId}/items/{cartItemId}
+     */
     @PutMapping("/{userId}/items/{cartItemId}")
     public ResponseEntity<?> updateCartItem(
             @PathVariable Integer userId,
@@ -109,9 +119,10 @@ public class CartController {
         }
     }
 
-    // =========================
-    // Remove item from cart
-    // =========================
+    /**
+     * Remove item from cart
+     * DELETE /api/cart/{userId}/items/{cartItemId}
+     */
     @DeleteMapping("/{userId}/items/{cartItemId}")
     public ResponseEntity<?> removeFromCart(
             @PathVariable Integer userId,
@@ -129,9 +140,10 @@ public class CartController {
         }
     }
 
-    // =========================
-    // Clear entire cart
-    // =========================
+    /**
+     * Clear entire cart
+     * DELETE /api/cart/{userId}/clear
+     */
     @DeleteMapping("/{userId}/clear")
     public ResponseEntity<?> clearCart(@PathVariable Integer userId) {
         try {
@@ -144,13 +156,5 @@ public class CartController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Failed to clear cart: " + e.getMessage());
         }
-    }
-
-    // =========================
-    // Health check
-    // =========================
-    @GetMapping("/health")
-    public ResponseEntity<String> healthCheck() {
-        return ResponseEntity.ok("Cart Service is running!");
     }
 }

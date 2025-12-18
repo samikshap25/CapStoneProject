@@ -1,5 +1,7 @@
 package com.ecommerce.order.service;
 
+import com.ecommerce.order.client.ProductClient;
+import com.ecommerce.order.client.ProductClient.ProductResponse;
 import com.ecommerce.order.dto.CartDto;
 import com.ecommerce.order.dto.CartItemDto;
 import com.ecommerce.order.model.Cart;
@@ -11,16 +13,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
-import java.time.Duration;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Service layer for Cart operations
+ * Manages shopping cart functionality
+ */
 @Service
 @Transactional
 public class CartService {
@@ -34,11 +36,11 @@ public class CartService {
     private CartItemRepository cartItemRepository;
 
     @Autowired
-    private WebClient.Builder webClientBuilder;
+    private ProductClient productClient;  // ✅ Using Feign Client
 
-    // =========================
-    // Get or Create Cart
-    // =========================
+    /**
+     * Get or create cart for user
+     */
     public Cart getOrCreateCart(Integer userId) {
         log.info("📦 Getting or creating cart for userId: {}", userId);
         Cart cart = cartRepository.findByUserId(userId)
@@ -50,14 +52,21 @@ public class CartService {
         return cart;
     }
 
-    // =========================
-    // Add To Cart
-    // =========================
+    /**
+     * Add item to cart
+     */
     public CartDto addToCart(Integer userId, Long productId, Integer quantity) {
-        log.info("🛒 Adding to cart - userId: {}, productId: {}, quantity: {}", userId, productId, quantity);
+        log.info("🛒 Adding to cart - userId: {}, productId: {}, quantity: {}", 
+                userId, productId, quantity);
 
-        // Fetch product details
-        ProductResponse product = fetchProduct(productId);
+        // Fetch product details via Feign Client
+        ProductResponse product;
+        try {
+            product = productClient.getProduct(productId);
+        } catch (Exception e) {
+            log.error("❌ Failed to fetch product {}: {}", productId, e.getMessage());
+            throw new RuntimeException("Product not found: " + productId);
+        }
 
         if (product == null) {
             log.error("❌ Product not found: {}", productId);
@@ -67,6 +76,7 @@ public class CartService {
         log.info("📦 Product found: {} (Price: ₹{}, Stock: {})", 
                 product.getName(), product.getPrice(), product.getQuantity());
 
+        // Check stock availability
         if (product.getQuantity() < quantity) {
             log.error("❌ Insufficient stock - Available: {}, Requested: {}", 
                     product.getQuantity(), quantity);
@@ -75,15 +85,18 @@ public class CartService {
 
         Cart cart = getOrCreateCart(userId);
 
+        // Check if item already exists in cart
         CartItem item = cartItemRepository
                 .findByCartAndProductId(cart, productId)
                 .orElse(null);
 
         if (item != null) {
+            // Update existing item
             log.info("📝 Updating existing cart item - Old qty: {}, New qty: {}", 
                     item.getQuantity(), item.getQuantity() + quantity);
             item.setQuantity(item.getQuantity() + quantity);
         } else {
+            // Create new item
             log.info("✨ Creating new cart item");
             item = new CartItem(
                     cart,
@@ -100,9 +113,9 @@ public class CartService {
         return convertToDto(cart);
     }
 
-    // =========================
-    // Get Cart
-    // =========================
+    /**
+     * Get cart
+     */
     @Transactional(readOnly = true)
     public CartDto getCart(Integer userId) {
         log.info("📥 Fetching cart for userId: {}", userId);
@@ -115,11 +128,12 @@ public class CartService {
         return convertToDto(cart);
     }
 
-    // =========================
-    // Update Cart Item
-    // =========================
+    /**
+     * Update cart item quantity
+     */
     public CartDto updateCartItem(Integer userId, Long cartItemId, Integer quantity) {
-        log.info("📝 Updating cart item {} for user {} to quantity {}", cartItemId, userId, quantity);
+        log.info("📝 Updating cart item {} for user {} to quantity {}", 
+                cartItemId, userId, quantity);
 
         Cart cart = cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new RuntimeException("Cart not found"));
@@ -127,15 +141,18 @@ public class CartService {
         CartItem item = cartItemRepository.findById(cartItemId)
                 .orElseThrow(() -> new RuntimeException("Cart item not found"));
 
+        // Verify item belongs to user's cart
         if (!item.getCart().getCartId().equals(cart.getCartId())) {
             throw new RuntimeException("Unauthorized access");
         }
 
         if (quantity <= 0) {
+            // Remove item if quantity is 0 or negative
             log.info("🗑️ Removing item from cart (quantity = 0)");
             cart.getItems().remove(item);
             cartItemRepository.delete(item);
         } else {
+            // Update quantity
             item.setQuantity(quantity);
             cartItemRepository.save(item);
         }
@@ -144,9 +161,9 @@ public class CartService {
         return convertToDto(cart);
     }
 
-    // =========================
-    // Remove Cart Item
-    // =========================
+    /**
+     * Remove item from cart
+     */
     public CartDto removeFromCart(Integer userId, Long cartItemId) {
         log.info("🗑️ Removing cart item {} for user {}", cartItemId, userId);
 
@@ -163,9 +180,9 @@ public class CartService {
         return convertToDto(cart);
     }
 
-    // =========================
-    // Clear Cart
-    // =========================
+    /**
+     * Clear entire cart
+     */
     public void clearCart(Integer userId) {
         log.info("🗑️ Clearing cart for user {}", userId);
         Cart cart = cartRepository.findByUserId(userId)
@@ -176,9 +193,9 @@ public class CartService {
         log.info("✅ Cart cleared successfully");
     }
 
-    // =========================
-    // Convert Entity → DTO
-    // =========================
+    /**
+     * Convert Cart entity to DTO
+     */
     private CartDto convertToDto(Cart cart) {
         log.info("🔄 Converting cart to DTO");
 
@@ -188,19 +205,21 @@ public class CartService {
         dto.setCreatedAt(cart.getCreatedAt());
         dto.setUpdatedAt(cart.getUpdatedAt());
 
+        // Fetch product details for all items
         List<Long> productIds = cart.getItems()
                 .stream()
                 .map(CartItem::getProductId)
+                .distinct()
                 .collect(Collectors.toList());
 
         log.info("📦 Fetching product details for {} products", productIds.size());
 
         Map<Long, ProductResponse> productMap = productIds.stream()
-                .distinct()
-                .map(this::fetchProduct)
+                .map(this::fetchProductSafely)
                 .filter(p -> p != null)
                 .collect(Collectors.toMap(ProductResponse::getProductId, p -> p));
 
+        // Convert cart items to DTOs
         dto.setItems(cart.getItems().stream().map(item -> {
             CartItemDto d = new CartItemDto();
             d.setCartItemId(item.getCartItemId());
@@ -210,15 +229,16 @@ public class CartService {
             d.setTotal(item.getTotal());
             d.setAddedAt(item.getAddedAt());
 
+            // Add product details
             ProductResponse product = productMap.get(item.getProductId());
             if (product != null) {
                 d.setProductName(product.getName());
-                d.setImageUrl(product.getImageUrl());
             }
 
             return d;
         }).collect(Collectors.toList()));
 
+        // Calculate total amount
         dto.setTotalAmount(
                 cart.getItems().stream()
                         .map(CartItem::getTotal)
@@ -229,61 +249,20 @@ public class CartService {
         return dto;
     }
 
-    // =========================
-    // Product Service Call
-    // =========================
-    private ProductResponse fetchProduct(Long productId) {
+    /**
+     * Safely fetch product (handles errors)
+     */
+    private ProductResponse fetchProductSafely(Long productId) {
         try {
-            log.info("🌐 Fetching product {} from product-service", productId);
-            
-            ProductResponse product = webClientBuilder.build()
-                    .get()
-                    .uri("http://product-service/api/products/{id}", productId)
-                    .retrieve()
-                    .bodyToMono(ProductResponse.class)
-                    .timeout(Duration.ofSeconds(5))
-                    .onErrorResume(error -> {
-                        log.error("❌ Error fetching product {}: {}", productId, error.getMessage());
-                        return Mono.empty();
-                    })
-                    .block();
-            
+            log.info("🌐 Fetching product {} via Feign", productId);
+            ProductResponse product = productClient.getProduct(productId);
             if (product != null) {
                 log.info("✅ Product fetched: {}", product.getName());
-            } else {
-                log.warn("⚠️ Product {} not found", productId);
             }
-            
             return product;
         } catch (Exception e) {
             log.error("❌ Failed to fetch product {}: {}", productId, e.getMessage());
             return null;
         }
-    }
-
-    // =========================
-    // Product DTO (MATCH product-service)
-    // =========================
-    public static class ProductResponse {
-        private Long productId;
-        private String name;
-        private Double price;
-        private Integer quantity;
-        private String imageUrl;
-
-        public Long getProductId() { return productId; }
-        public void setProductId(Long productId) { this.productId = productId; }
-        
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        
-        public Double getPrice() { return price; }
-        public void setPrice(Double price) { this.price = price; }
-        
-        public Integer getQuantity() { return quantity; }
-        public void setQuantity(Integer quantity) { this.quantity = quantity; }
-        
-        public String getImageUrl() { return imageUrl; }
-        public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
     }
 }
