@@ -1,6 +1,5 @@
 package com.ecommerce.product.exception;
 
-import com.ecommerce.product.dto.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -9,77 +8,83 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
+/**
+ * Global exception handler for the Product Service
+ * Catches exceptions thrown by controllers and returns appropriate HTTP responses
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    /**
+     * Handle ProductNotFoundException
+     * Returns 404 Not Found
+     */
     @ExceptionHandler(ProductNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleProductNotFound(ProductNotFoundException e) {
-        ErrorResponse error = new ErrorResponse(
-            HttpStatus.NOT_FOUND.value(),
-            e.getMessage(),
-            LocalDateTime.now()
-        );
-        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+    public ResponseEntity<Map<String, Object>> handleProductNotFound(ProductNotFoundException e) {
+        Map<String, Object> error = new HashMap<>();
+        error.put("timestamp", LocalDateTime.now());
+        error.put("status", HttpStatus.NOT_FOUND.value());
+        error.put("error", "Not Found");
+        error.put("message", e.getMessage());
+        
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
+    /**
+     * Handle InvalidProductDataException
+     * Returns 400 Bad Request
+     */
     @ExceptionHandler(InvalidProductDataException.class)
-    public ResponseEntity<ErrorResponse> handleInvalidProductData(InvalidProductDataException e) {
-        ErrorResponse error = new ErrorResponse(
-            HttpStatus.BAD_REQUEST.value(),
-            e.getMessage(),
-            LocalDateTime.now()
-        );
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    public ResponseEntity<Map<String, Object>> handleInvalidProductData(InvalidProductDataException e) {
+        Map<String, Object> error = new HashMap<>();
+        error.put("timestamp", LocalDateTime.now());
+        error.put("status", HttpStatus.BAD_REQUEST.value());
+        error.put("error", "Bad Request");
+        error.put("message", e.getMessage());
+        
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
-    @ExceptionHandler(InsufficientStockException.class)
-    public ResponseEntity<ErrorResponse> handleInsufficientStock(InsufficientStockException e) {
-        ErrorResponse error = new ErrorResponse(
-            HttpStatus.CONFLICT.value(),
-            e.getMessage(),
-            LocalDateTime.now()
-        );
-        return new ResponseEntity<>(error, HttpStatus.CONFLICT);
-    }
-
+    /**
+     * Handle validation errors from @Valid annotation
+     * Returns 400 Bad Request with field-specific errors
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponse> handleValidationExceptions(MethodArgumentNotValidException ex) {
-        List<String> errors = new ArrayList<>();
+    public ResponseEntity<Map<String, Object>> handleValidationExceptions(MethodArgumentNotValidException ex) {
+        Map<String, String> fieldErrors = new HashMap<>();
+        
+        // Extract all field validation errors
         ex.getBindingResult().getAllErrors().forEach((error) -> {
             String fieldName = ((FieldError) error).getField();
             String errorMessage = error.getDefaultMessage();
-            errors.add(fieldName + ": " + errorMessage);
+            fieldErrors.put(fieldName, errorMessage);
         });
 
-        ErrorResponse error = new ErrorResponse(
-            HttpStatus.BAD_REQUEST.value(),
-            "Validation failed",
-            LocalDateTime.now(),
-            errors
-        );
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+        Map<String, Object> error = new HashMap<>();
+        error.put("timestamp", LocalDateTime.now());
+        error.put("status", HttpStatus.BAD_REQUEST.value());
+        error.put("error", "Validation Failed");
+        error.put("message", "Invalid product data");
+        error.put("fieldErrors", fieldErrors);
+        
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
+    /**
+     * Handle all other RuntimeExceptions
+     * Returns 500 Internal Server Error
+     */
     @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<ErrorResponse> handleRuntime(RuntimeException e) {
-        ErrorResponse error = new ErrorResponse(
-            HttpStatus.INTERNAL_SERVER_ERROR.value(),
-            "An unexpected error occurred: " + e.getMessage(),
-            LocalDateTime.now()
-        );
-        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGenericException(Exception e) {
-        ErrorResponse error = new ErrorResponse(
-            HttpStatus.INTERNAL_SERVER_ERROR.value(),
-            "An error occurred",
-            LocalDateTime.now()
-        );
-        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
+    public ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException e) {
+        Map<String, Object> error = new HashMap<>();
+        error.put("timestamp", LocalDateTime.now());
+        error.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+        error.put("error", "Internal Server Error");
+        error.put("message", e.getMessage());
+        
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
 }
