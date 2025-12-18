@@ -18,7 +18,7 @@ public class JwtUtil {
  * 2. Method to verify the Token 
  * */
 	
-	private static final String secretKey = "LMS_HEX_MAY_78674867909090909090909";
+	private static final String secretKey = "ECOMMERCE_78674867909090909090909";
 	private static final long expirationTimeInMills=43200000; //12 hrs 
 	
 	private Key getSigningKey(){
