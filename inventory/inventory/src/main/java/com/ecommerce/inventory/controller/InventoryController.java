@@ -4,11 +4,15 @@ import com.ecommerce.inventory.dto.InventoryDto;
 import com.ecommerce.inventory.dto.ReserveRequest;
 import com.ecommerce.inventory.model.Inventory;
 import com.ecommerce.inventory.service.InventoryService;
+
+import java.util.List;
+
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/inventory")
+@RequestMapping("/api/inventory")
 public class InventoryController {
 
     private final InventoryService service;
@@ -17,41 +21,63 @@ public class InventoryController {
         this.service = service;
     }
 
-    // GET: Check stock
+    // ✅ Used by Order / Product service
     @GetMapping("/{productId}")
     public ResponseEntity<Integer> getStock(@PathVariable Long productId) {
-        int stock = service.getStock(productId);
-        return ResponseEntity.ok(stock);
+        return ResponseEntity.ok(service.getStock(productId));
     }
 
-    // PUT: Update stock
+    @GetMapping("/{productId}/check")
+    public ResponseEntity<Boolean> checkInventory(
+            @PathVariable Long productId,
+            @RequestParam Integer quantity) {
+        return ResponseEntity.ok(service.checkInventory(productId, quantity));
+    }
+
+    // ✅ FIXED: include productName
+    @PostMapping
+    public ResponseEntity<Inventory> createInventory(@RequestBody InventoryDto dto) {
+        Inventory created = service.createInventory(
+                dto.getProductId(),
+                dto.getProductName(),
+                dto.getQuantity()
+        );
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    // ✅ Used by Admin UI
     @PutMapping("/{productId}")
     public ResponseEntity<Inventory> updateStock(
             @PathVariable Long productId,
             @RequestBody InventoryDto dto
     ) {
-        Inventory updated = service.updateStock(productId, dto.getNewStock());
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(
+                service.updateStock(productId, dto.getQuantity())
+        );
     }
 
-    // POST: Reserve stock
-  @PostMapping("/reserve")
+    @PostMapping("/reserve")
     public ResponseEntity<Boolean> reserveStock(@RequestBody ReserveRequest request) {
-        try {
-            boolean success = service.reserveStock(
-                request.getProductId(), 
-                request.getQuantity()
-            );
-            return ResponseEntity.ok(success);
-        } catch (Exception e) {
-            return ResponseEntity.ok(false);
+        return ResponseEntity.ok(
+                service.reserveStock(request.getProductId(), request.getQuantity())
+        );
     }
-}
 
-    // POST: Release stock
     @PostMapping("/release")
     public ResponseEntity<String> releaseStock(@RequestBody InventoryDto dto) {
         service.releaseStock(dto.getProductId(), dto.getQuantity());
         return ResponseEntity.ok("Reserved stock released");
+    }
+
+    @PostMapping("/deduct")
+    public ResponseEntity<String> deductStock(@RequestBody InventoryDto dto) {
+        service.deductStock(dto.getProductId(), dto.getQuantity());
+        return ResponseEntity.ok("Stock deducted successfully");
+    }
+
+    // ✅ Used by Admin Inventory page
+    @GetMapping
+    public ResponseEntity<List<Inventory>> getAllInventory() {
+        return ResponseEntity.ok(service.getAllInventory());
     }
 }
